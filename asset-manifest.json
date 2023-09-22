@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/mosaic-generator/static/css/main.6574ef0c.css",
+    "main.js": "/mosaic-generator/static/js/main.768bb438.js",
+    "static/js/787.e9ef24fe.chunk.js": "/mosaic-generator/static/js/787.e9ef24fe.chunk.js",
+    "index.html": "/mosaic-generator/index.html",
+    "main.6574ef0c.css.map": "/mosaic-generator/static/css/main.6574ef0c.css.map",
+    "main.768bb438.js.map": "/mosaic-generator/static/js/main.768bb438.js.map",
+    "787.e9ef24fe.chunk.js.map": "/mosaic-generator/static/js/787.e9ef24fe.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.6574ef0c.css",
+    "static/js/main.768bb438.js"
+  ]
+}
