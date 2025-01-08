@@ -28,10 +28,7 @@
 }
 
 /* Demo “hero” image styling: you can differentiate hero from smaller images */
-.hero {
-  border: 3px solid #FFFFFF;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
+/* Removed the .hero block */
 
 /* A simple container for the file input and optional controls */
 .controls {

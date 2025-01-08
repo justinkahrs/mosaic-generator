@@ -11,7 +11,7 @@ import { Button, Box } from "@mui/material";
  * - 'src': for images, the data URL or file path
  * - 'width', 'height': dimension of the piece
  * - 'top', 'left': position on the mosaic
- * - 'hero': optional marker for hero image styling
+ * - 'hero': optional marker for hero image styling (no extra styling now)
  */
 interface MosaicPiece {
   id: string;
@@ -30,17 +30,20 @@ export default function MosaicPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const heroFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Reference to the mosaic container for accurate boundingRect calculations
+  // Reference to the mosaic container
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Resizing state
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [initialPointer, setInitialPointer] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
   /**
-   * onFileChange handles normal images (non-hero). Convert each file to data URL,
-   * and position them randomly for demonstration. In practice, you'd refine the
-   * layout logic or let the user drag them after dropping in the mosaic.
+   * onFileChange handles normal images (non-hero).
    */
   const onFileChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
     if (!evt.target.files) return;
@@ -62,15 +65,14 @@ export default function MosaicPage() {
         height,
         top,
         left,
-        hero: false,
       });
     }
     setPieces((prev) => [...prev, ...newPieces]);
   };
 
   /**
-   * onHeroFileChange handles a single hero image upload. We set 'hero: true'
-   * and optionally place it at a default location. We'll just use the first file.
+   * onHeroFileChange handles a single "hero" image upload. We no longer style hero specially,
+   * but we keep the property for possible future logic.
    */
   const onHeroFileChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
     if (!evt.target.files || !evt.target.files[0]) return;
@@ -87,7 +89,6 @@ export default function MosaicPage() {
       left: 20,
       hero: true,
     };
-    // Prepend hero piece
     setPieces((prev) => [heroPiece, ...prev]);
   };
 
@@ -108,90 +109,148 @@ export default function MosaicPage() {
         height: size,
         top,
         left,
-        hero: false,
       };
     });
     setPieces((prev) => [...prev, ...newBlocks]);
   };
 
   /**
-   * MOUSE / POINTER EVENTS: handle dragging. We'll store the piece ID that
-   * we’re dragging and track offset so we can move it smoothly. Now referencing
-   * the container’s bounding rect to ensure correct alignment under cursor.
+   * Bring a piece to "front" by splicing it to the end of the array.
+   */
+  const bringToFront = useCallback((pieceId: string) => {
+    setPieces((prev) => {
+      const index = prev.findIndex((p) => p.id === pieceId);
+      if (index === -1) return prev;
+      const piece = prev[index];
+      const newArr = [...prev];
+      newArr.splice(index, 1);
+      newArr.push(piece);
+      return newArr;
+    });
+  }, []);
+
+  /**
+   * MOUSE / POINTER EVENTS: handle dragging.
+   * If the user pointer-down on the main body of the piece, we set up drag.
+   * If they pointer-down on the resize handle, we set up resize instead.
    */
 
-  const handlePointerDown = useCallback(
+  const handlePiecePointerDown = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
       if (!containerRef.current) return;
+      // If we’re already resizing or dragging something else, ignore
+      if (resizingId || draggingId) return;
 
-      // Bring this piece to "front" by reordering state
-      setPieces((prev) => {
-        const index = prev.findIndex((p) => p.id === pieceId);
-        if (index === -1) return prev;
-        const piece = prev[index];
-        const newArr = [...prev];
-        newArr.splice(index, 1);
-        newArr.push(piece);
-        return newArr;
-      });
-
+      bringToFront(pieceId);
       setDraggingId(pieceId);
 
-      // measure the piece’s boundingRect
       const pieceRect = evt.currentTarget.getBoundingClientRect();
-      // measure container boundingRect
-      const containerRect = containerRef.current.getBoundingClientRect();
-
-      // dragOffset is how far inside the piece the pointer was clicked
       setDragOffset({
         x: evt.clientX - pieceRect.left,
         y: evt.clientY - pieceRect.top,
       });
 
-      // Prevent default to ensure pointer events are captured
       evt.preventDefault();
       evt.stopPropagation();
     },
-    []
+    [bringToFront, draggingId, resizingId]
   );
 
   const handlePointerMove = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>) => {
-      if (!draggingId || !containerRef.current) return;
+      if (!containerRef.current) return;
 
-      // measure container boundingRect so we can position piece inside container
-      const containerRect = containerRef.current.getBoundingClientRect();
+      // If resizing
+      if (resizingId) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const deltaX = evt.clientX - containerRect.left - initialPointer.x;
+        const deltaY = evt.clientY - containerRect.top - initialPointer.y;
+        setPieces((prev) =>
+          prev.map((piece) => {
+            if (piece.id === resizingId) {
+              // new width & height
+              let newW = initialSize.w + deltaX;
+              let newH = initialSize.h + deltaY;
 
-      // compute new top/left relative to container
-      const newLeft = evt.clientX - containerRect.left - dragOffset.x;
-      const newTop = evt.clientY - containerRect.top - dragOffset.y;
+              // enforce minimal size (say 30px)
+              if (newW < 30) newW = 30;
+              if (newH < 30) newH = 30;
 
-      setPieces((prev) =>
-        prev.map((piece) => {
-          if (piece.id === draggingId) {
-            return {
-              ...piece,
-              top: newTop,
-              left: newLeft,
-            };
-          }
-          return piece;
-        })
-      );
-      evt.preventDefault();
+              return {
+                ...piece,
+                width: newW,
+                height: newH,
+              };
+            }
+            return piece;
+          })
+        );
+        evt.preventDefault();
+        return;
+      }
+
+      // If dragging
+      if (draggingId) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newLeft = evt.clientX - containerRect.left - dragOffset.x;
+        const newTop = evt.clientY - containerRect.top - dragOffset.y;
+        setPieces((prev) =>
+          prev.map((piece) => {
+            if (piece.id === draggingId) {
+              return {
+                ...piece,
+                left: newLeft,
+                top: newTop,
+              };
+            }
+            return piece;
+          })
+        );
+        evt.preventDefault();
+      }
     },
-    [draggingId, dragOffset]
+    [draggingId, resizingId, dragOffset, initialPointer, initialSize]
   );
 
   const handlePointerUp = useCallback(() => {
     setDraggingId(null);
+    setResizingId(null);
   }, []);
+
+  /**
+   * handleResizeHandlePointerDown: user clicked on the resize handle
+   */
+  const handleResizeHandlePointerDown = useCallback(
+    (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
+      if (!containerRef.current) return;
+      // If already dragging/resizing, ignore
+      if (draggingId || resizingId) return;
+
+      bringToFront(pieceId);
+      setResizingId(pieceId);
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const pointerX = evt.clientX - containerRect.left;
+      const pointerY = evt.clientY - containerRect.top;
+
+      // find the piece
+      const piece = pieces.find((p) => p.id === pieceId);
+      if (!piece) return;
+
+      // store initial pointer coords and piece size
+      setInitialPointer({ x: pointerX, y: pointerY });
+      setInitialSize({ w: piece.width, h: piece.height });
+
+      evt.preventDefault();
+      evt.stopPropagation();
+    },
+    [bringToFront, draggingId, resizingId, pieces]
+  );
 
   return (
     <Box
       sx={{ padding: 4 }}
       style={{ touchAction: "none" }}
-      // Attach pointer events to the container so we can track moves
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
@@ -228,45 +287,50 @@ export default function MosaicPage() {
 
       <div className={styles.mosaicContainer} ref={containerRef}>
         {pieces.map((piece) => {
-          if (piece.type === "color") {
-            return (
-              <div
-                key={piece.id}
-                className={`${styles.mosaicPiece} ${styles.colorBlock}`}
-                style={{
-                  width: piece.width,
-                  height: piece.height,
-                  top: piece.top,
-                  left: piece.left,
-                  backgroundColor: piece.color,
-                }}
-                onPointerDown={(e) => handlePointerDown(e, piece.id)}
-              />
-            );
-          }
-
-          // Image piece
+          const { id, type, src, color, width, height, top, left } = piece;
+          const styleProps: React.CSSProperties = {
+            width,
+            height,
+            top,
+            left,
+          };
           return (
             <div
-              key={piece.id}
-              className={`${styles.mosaicPiece} ${piece.hero ? styles.hero : ""}`}
-              style={{
-                width: piece.width,
-                height: piece.height,
-                top: piece.top,
-                left: piece.left,
-              }}
-              onPointerDown={(e) => handlePointerDown(e, piece.id)}
+              key={id}
+              className={`${styles.mosaicPiece}`}
+              style={styleProps}
+              onPointerDown={(e) => handlePiecePointerDown(e, id)}
             >
-              {piece.src && (
-                <Image
-                  src={piece.src}
-                  alt="mosaic-piece"
-                  width={piece.width}
-                  height={piece.height}
-                  style={{ objectFit: "cover" }}
+              {type === "color" ? (
+                <div
+                  style={{ width: "100%", height: "100%", backgroundColor: color }}
                 />
+              ) : (
+                src && (
+                  <Image
+                    src={src}
+                    alt="mosaic-piece"
+                    width={width}
+                    height={height}
+                    style={{ objectFit: "cover" }}
+                  />
+                )
               )}
+
+              {/* Resize handle in bottom-right corner */}
+              <div
+                style={{
+                  position: "absolute",
+                  width: "14px",
+                  height: "14px",
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: "#cccccc",
+                  cursor: "se-resize",
+                  border: "1px solid #444",
+                }}
+                onPointerDown={(e) => handleResizeHandlePointerDown(e, id)}
+              />
             </div>
           );
         })}
