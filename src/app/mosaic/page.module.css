@@ -16,9 +16,10 @@
   cursor: pointer;
 }
 
-/* On hover, gently “lift” the piece */
+/* On hover, display a thin blue outline instead of scaling */
 .mosaicPiece:hover {
-  transform: scale(1.03);
+  transform: none;
+  outline: 2px solid #007aff;
 }
 
 /* Demo color block styling */

@@ -11,7 +11,7 @@ import { Button, Box } from "@mui/material";
  * - 'src': for images, the data URL or file path
  * - 'width', 'height': dimension of the piece
  * - 'top', 'left': position on the mosaic
- * - 'hero': optional marker for hero image styling (no extra styling now)
+ * - 'hero': optional marker for hero image styling (not currently used)
  */
 interface MosaicPiece {
   id: string;
@@ -25,31 +25,34 @@ interface MosaicPiece {
   hero?: boolean;
 }
 
+// We’ll snap to this grid size.
+const GRID_SIZE = 20;
+
 export default function MosaicPage() {
   const [pieces, setPieces] = useState<MosaicPiece[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const heroFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Reference to the mosaic container
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Resizing state
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [initialPointer, setInitialPointer] = useState<{ x: number; y: number }>({
     x: 0,
     y: 0,
   });
 
-  // Resizing state
-  const [resizingId, setResizingId] = useState<string | null>(null);
-  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({
-    w: 0,
-    h: 0,
-  });
-  const [initialPointer, setInitialPointer] = useState<{
-    x: number;
-    y: number;
-  }>({ x: 0, y: 0 });
+  /**
+   * Snap a position or size to our GRID_SIZE, using standard rounding.
+   */
+  const snapToGrid = useCallback((value: number) => {
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  }, []);
 
   /**
    * onFileChange handles normal images (non-hero).
@@ -61,10 +64,11 @@ export default function MosaicPage() {
     const newPieces: MosaicPiece[] = [];
     for (const file of files) {
       const dataUrl = await readFileAsDataURL(file);
-      const width = Math.floor(150 + Math.random() * 100);
-      const height = Math.floor(100 + Math.random() * 80);
-      const top = Math.floor(Math.random() * 300);
-      const left = Math.floor(Math.random() * 300);
+      // Random approximate initial position
+      const width = snapToGrid(Math.floor(150 + Math.random() * 100));
+      const height = snapToGrid(Math.floor(100 + Math.random() * 80));
+      const top = snapToGrid(Math.floor(Math.random() * 300));
+      const left = snapToGrid(Math.floor(Math.random() * 300));
 
       newPieces.push({
         id: crypto.randomUUID(),
@@ -80,36 +84,14 @@ export default function MosaicPage() {
   };
 
   /**
-   * onHeroFileChange handles a single "hero" image upload. We no longer style hero specially,
-   * but we keep the property for possible future logic.
-   */
-  const onHeroFileChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
-    if (!evt.target.files || !evt.target.files[0]) return;
-    const file = evt.target.files[0];
-    const dataUrl = await readFileAsDataURL(file);
-
-    const heroPiece: MosaicPiece = {
-      id: crypto.randomUUID(),
-      type: "image",
-      src: dataUrl,
-      width: 300,
-      height: 200,
-      top: 20,
-      left: 20,
-      hero: true,
-    };
-    setPieces((prev) => [heroPiece, ...prev]);
-  };
-
-  /**
    * Add random color blocks.
    */
   const addColorBlocks = () => {
     const colors = ["#FFC107", "#8BC34A", "#F44336", "#3F51B5", "#E91E63"];
     const newBlocks: MosaicPiece[] = colors.map((color) => {
-      const size = 60 + Math.random() * 60;
-      const top = Math.floor(Math.random() * 300);
-      const left = Math.floor(Math.random() * 300);
+      const size = snapToGrid(60 + Math.random() * 60);
+      const top = snapToGrid(Math.floor(Math.random() * 300));
+      const left = snapToGrid(Math.floor(Math.random() * 300));
       return {
         id: crypto.randomUUID(),
         type: "color",
@@ -139,11 +121,8 @@ export default function MosaicPage() {
   }, []);
 
   /**
-   * MOUSE / POINTER EVENTS: handle dragging.
-   * If the user pointer-down on the main body of the piece, we set up drag.
-   * If they pointer-down on the resize handle, we set up resize instead.
+   * handlePiecePointerDown: user pointer-down on the main body of the piece => start dragging.
    */
-
   const handlePiecePointerDown = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
       if (!containerRef.current) return;
@@ -165,6 +144,9 @@ export default function MosaicPage() {
     [bringToFront, draggingId, resizingId]
   );
 
+  /**
+   * handlePointerMove: handle both dragging & resizing in one event.
+   */
   const handlePointerMove = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>) => {
       if (!containerRef.current) return;
@@ -177,18 +159,15 @@ export default function MosaicPage() {
         setPieces((prev) =>
           prev.map((piece) => {
             if (piece.id === resizingId) {
-              // new width & height
               let newW = initialSize.w + deltaX;
               let newH = initialSize.h + deltaY;
-
-              // enforce minimal size (say 30px)
               if (newW < 30) newW = 30;
               if (newH < 30) newH = 30;
-
+              // Snap new width/height
               return {
                 ...piece,
-                width: newW,
-                height: newH,
+                width: snapToGrid(newW),
+                height: snapToGrid(newH),
               };
             }
             return piece;
@@ -208,8 +187,8 @@ export default function MosaicPage() {
             if (piece.id === draggingId) {
               return {
                 ...piece,
-                left: newLeft,
-                top: newTop,
+                left: snapToGrid(newLeft),
+                top: snapToGrid(newTop),
               };
             }
             return piece;
@@ -218,7 +197,7 @@ export default function MosaicPage() {
         evt.preventDefault();
       }
     },
-    [draggingId, resizingId, dragOffset, initialPointer, initialSize]
+    [draggingId, resizingId, dragOffset, initialPointer, initialSize, snapToGrid]
   );
 
   const handlePointerUp = useCallback(() => {
@@ -263,9 +242,8 @@ export default function MosaicPage() {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      <h1>Dynamic Mosaic</h1>
+      <h1>Dynamic Mosaic (with Grid Snapping)</h1>
       <div className={styles.controls}>
-        {/* Normal images */}
         <input
           ref={fileInputRef}
           type="file"
@@ -274,25 +252,8 @@ export default function MosaicPage() {
           onChange={onFileChange}
           style={{ display: "none" }}
         />
-        <Button
-          variant="contained"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <Button variant="contained" onClick={() => fileInputRef.current?.click()}>
           Upload Images
-        </Button>
-        {/* Hero image */}
-        <input
-          ref={heroFileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={onHeroFileChange}
-          style={{ display: "none" }}
-        />
-        <Button
-          variant="outlined"
-          onClick={() => heroFileInputRef.current?.click()}
-        >
-          Upload Hero Image
         </Button>
 
         <Button variant="outlined" onClick={addColorBlocks}>
@@ -312,7 +273,7 @@ export default function MosaicPage() {
           return (
             <div
               key={id}
-              className={`${styles.mosaicPiece}`}
+              className={styles.mosaicPiece}
               style={styleProps}
               onPointerDown={(e) => handlePiecePointerDown(e, id)}
             >
@@ -340,8 +301,8 @@ export default function MosaicPage() {
               <div
                 style={{
                   position: "absolute",
-                  width: "14px",
-                  height: "14px",
+                  width: "28px",
+                  height: "28px",
                   bottom: 0,
                   right: 0,
                   cursor: "se-resize",
