@@ -5,7 +5,8 @@
   margin: 0 auto;
   /* Adjust as needed for your design */
   border: 1px solid rgba(0, 0, 0, 0.1);
-  overflow: hidden; /* Clip any overflow from partial overlaps */
+  overflow: hidden;
+  /* Clip any overflow from partial overlaps */
 }
 
 /* Each piece (image or color block) is absolutely positioned */
@@ -13,12 +14,13 @@
   position: absolute;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: transform 0.25s ease;
-  cursor: pointer;
+  cursor: move;
 }
 
 /* On hover, display a thin blue outline instead of scaling */
 .mosaicPiece:hover {
   transform: none;
+  outline-offset: -2px;
   outline: 2px solid #007aff;
 }
 

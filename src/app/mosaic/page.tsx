@@ -1,18 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import type React from "react";
+import { useState, useRef, useCallback } from "react";
 import styles from "./page.module.css";
 import Image from "next/image";
 import { Button, Box } from "@mui/material";
 
-/**
- * Represents a single piece in the mosaic:
- * - 'type': "image" | "color"
- * - 'src': data URL or file path for images
- * - 'width','height' : piece dimension
- * - 'top','left' : piece position
- * - 'hero': optional marker for future logic
- */
 interface MosaicPiece {
   id: string;
   type: "image" | "color";
@@ -22,27 +15,31 @@ interface MosaicPiece {
   height: number;
   top: number;
   left: number;
-  hero?: boolean;
 }
 
 // Grid snapping
 const GRID_SIZE = 20;
-// Minimum piece dimension
 const MIN_SIZE = 30;
 
-/**
- * Helper to snap a value to the grid
- */
+/** Snap a value to the grid. */
 function snapToGrid(value: number): number {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
-/**
- * Collision detection: checks if two pieces overlap
- */
+/** Check if two pieces overlap. */
 function doOverlap(a: MosaicPiece, b: MosaicPiece): boolean {
-  const rectA = { left: a.left, right: a.left + a.width, top: a.top, bottom: a.top + a.height };
-  const rectB = { left: b.left, right: b.left + b.width, top: b.top, bottom: b.top + b.height };
+  const rectA = {
+    left: a.left,
+    right: a.left + a.width,
+    top: a.top,
+    bottom: a.top + a.height,
+  };
+  const rectB = {
+    left: b.left,
+    right: b.left + b.width,
+    top: b.top,
+    bottom: b.top + b.height,
+  };
 
   return !(
     rectA.right <= rectB.left ||
@@ -52,25 +49,21 @@ function doOverlap(a: MosaicPiece, b: MosaicPiece): boolean {
   );
 }
 
-/**
- * Nudges a piece in the specified direction until it's no longer overlapping others,
- * or we hit a max iteration.
- */
+/** Nudges a piece until no overlap or hits max iteration. */
 function nudgeUntilNoOverlap(
   piece: MosaicPiece,
   others: MosaicPiece[],
   direction: { x: number; y: number }
 ): MosaicPiece {
   let updated = piece;
-  const MAX_ITER = 200; // to avoid infinite loops
+  const MAX_ITER = 200;
   let iter = 0;
   while (true) {
-    // Check for overlap with any piece in `others`
     const anyOverlap = others.some(
       (o) => o.id !== updated.id && doOverlap(updated, o)
     );
     if (!anyOverlap) break;
-    // Nudge piece
+
     updated = {
       ...updated,
       left: updated.left + direction.x * GRID_SIZE,
@@ -78,23 +71,18 @@ function nudgeUntilNoOverlap(
     };
     iter++;
     if (iter > MAX_ITER) {
-      // Fallback: break to avoid infinite loop
       break;
     }
   }
   return updated;
 }
 
-/**
- * Fully resolves collisions in the entire set by repeatedly nudging pieces that collide
- * until no collisions remain or we exceed a max iteration count.
- */
+/** Repeatedly nudge pieces that collide until stable. */
 function resolveAllCollisions(pieces: MosaicPiece[]): MosaicPiece[] {
   const MAX_GLOBAL_ITER = 500;
   let iteration = 0;
-  let updatedPieces = [...pieces];
+  const updatedPieces = [...pieces];
 
-  // We'll do a naive repeated pass until stable or max iteration
   while (iteration < MAX_GLOBAL_ITER) {
     let collisionFound = false;
     for (let i = 0; i < updatedPieces.length; i++) {
@@ -103,12 +91,15 @@ function resolveAllCollisions(pieces: MosaicPiece[]): MosaicPiece[] {
         const p2 = updatedPieces[j];
         if (doOverlap(p1, p2)) {
           collisionFound = true;
-
-          // We'll nudge p2 downward or to the right if it collides
-          // Or for variety, we can pick direction based on whichever has smaller area
-          const dir = p1.width * p1.height < p2.width * p2.height ? { x: 1, y: 0 } : { x: 0, y: 1 };
-
-          const newP2 = nudgeUntilNoOverlap(p2, updatedPieces.filter((_, idx) => idx !== j), dir);
+          const dir =
+            p1.width * p1.height < p2.width * p2.height
+              ? { x: 1, y: 0 }
+              : { x: 0, y: 1 };
+          const newP2 = nudgeUntilNoOverlap(
+            p2,
+            updatedPieces.filter((_, idx) => idx !== j),
+            dir
+          );
           updatedPieces[j] = newP2;
         }
       }
@@ -120,51 +111,59 @@ function resolveAllCollisions(pieces: MosaicPiece[]): MosaicPiece[] {
   return updatedPieces;
 }
 
-/**
- * Attempts to place a new piece at or near (left, top). If that position collides, we nudge it
- * until no collision remains. Returns the final placed piece.
- */
+/** Insert a new piece, find a non-overlapping place by shifting down if collisions. */
 function findNonOverlappingPlacement(
   newPiece: MosaicPiece,
   existingPieces: MosaicPiece[]
 ): MosaicPiece {
-  // We do a naive approach: increment top in grid steps until no collision is found
-  // (or we give up).
   const MAX_PLACE_ITER = 500;
-  let candidate = { ...newPiece };
+  const candidate = { ...newPiece };
   let iteration = 0;
   while (iteration < MAX_PLACE_ITER) {
     const anyOverlap = existingPieces.some((o) => doOverlap(candidate, o));
     if (!anyOverlap) {
       return candidate;
     }
-    // Move down one grid step
     candidate.top += GRID_SIZE;
     iteration++;
   }
-  // If we can't find a spot, return as is
   return candidate;
 }
 
 export default function MosaicPage() {
   const [pieces, setPieces] = useState<MosaicPiece[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Drag state
+  // Dragging
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Resize state
-  const [resizingId, setResizingId] = useState<string | null>(null);
-  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [initialPointer, setInitialPointer] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Resizing
+  const [resizing, setResizing] = useState<{
+    pieceId: string;
+    edge: string;
+  } | null>(null);
+  const [initialSize, setInitialSize] = useState({
+    w: 0,
+    h: 0,
+    top: 0,
+    left: 0,
+  });
+  const [initialPointer, setInitialPointer] = useState({ x: 0, y: 0 });
 
-  // For simple BFS-like insertion, we place pieces using findNonOverlappingPlacement.
+  // Context menu state
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{
+    x: number;
+    y: number;
+  }>({
+    x: 0,
+    y: 0,
+  });
+  const [contextPieceId, setContextPieceId] = useState<string | null>(null);
 
-  /**
-   * Creates new image pieces for each file, places them collision-free.
-   */
+  /** Add images. */
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const onFileChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
     if (!evt.target.files) return;
     const files = Array.from(evt.target.files);
@@ -172,7 +171,6 @@ export default function MosaicPage() {
     let currentPieces = [...pieces];
     for (const file of files) {
       const dataUrl = await readFileAsDataURL(file);
-      // We'll start at random top/left
       const candidate: MosaicPiece = {
         id: crypto.randomUUID(),
         type: "image",
@@ -184,23 +182,20 @@ export default function MosaicPage() {
       };
       const placed = findNonOverlappingPlacement(candidate, currentPieces);
       currentPieces.push(placed);
-      // then globally resolve collisions
       currentPieces = resolveAllCollisions(currentPieces);
     }
     setPieces(currentPieces);
   };
 
-  /**
-   * Creates random color blocks, places them collision-free.
-   */
+  /** Add color blocks. */
   const addColorBlocks = () => {
     let currentPieces = [...pieces];
     const colors = ["#FFC107", "#8BC34A", "#F44336", "#3F51B5", "#E91E63"];
-    for (const color of colors) {
+    for (const c of colors) {
       const candidate: MosaicPiece = {
         id: crypto.randomUUID(),
         type: "color",
-        color,
+        color: c,
         width: snapToGrid(60 + Math.random() * 60),
         height: snapToGrid(60 + Math.random() * 60),
         top: snapToGrid(Math.random() * 200),
@@ -213,10 +208,8 @@ export default function MosaicPage() {
     setPieces(currentPieces);
   };
 
-  /**
-   * Brings piece to front by splicing it to the end
-   */
-  const bringToFront = (pieceId: string) => {
+  /** Bring piece to front. */
+  const bringToFront = useCallback((pieceId: string) => {
     setPieces((prev) => {
       const idx = prev.findIndex((p) => p.id === pieceId);
       if (idx === -1) return prev;
@@ -226,15 +219,13 @@ export default function MosaicPage() {
       newArr.push(piece);
       return newArr;
     });
-  };
+  }, []);
 
-  /**
-   * handlePiecePointerDown => start dragging if not resizing
-   */
+  /** handlePiecePointerDown => start dragging if not resizing. */
   const handlePiecePointerDown = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
       if (!containerRef.current) return;
-      if (resizingId || draggingId) return; // skip if already resizing/dragging
+      if (resizing) return; // skip if resizing
 
       bringToFront(pieceId);
       setDraggingId(pieceId);
@@ -247,41 +238,75 @@ export default function MosaicPage() {
       evt.preventDefault();
       evt.stopPropagation();
     },
-    [bringToFront, draggingId, resizingId]
+    [bringToFront, resizing]
   );
 
-  /**
-   * handlePointerMove => drag or resize in real time
-   */
+  /** handlePointerMove => handle dragging or resizing. */
   const handlePointerMove = useCallback(
     (evt: React.PointerEvent<HTMLDivElement>) => {
       if (!containerRef.current) return;
       const containerRect = containerRef.current.getBoundingClientRect();
 
       // Resizing
-      if (resizingId) {
+      if (resizing) {
         setPieces((prev) => {
-          const index = prev.findIndex((p) => p.id === resizingId);
-          if (index === -1) return prev;
-          const piece = prev[index];
-          const deltaX = evt.clientX - containerRect.left - initialPointer.x;
-          const deltaY = evt.clientY - containerRect.top - initialPointer.y;
+          const idx = prev.findIndex((p) => p.id === resizing.pieceId);
+          if (idx === -1) return prev;
+          const piece = prev[idx];
+
+          const dx = evt.clientX - initialPointer.x;
+          const dy = evt.clientY - initialPointer.y;
+
+          let newLeft = piece.left;
+          let newTop = piece.top;
           let newW = piece.width;
           let newH = piece.height;
-          newW = initialSize.w + deltaX;
-          newH = initialSize.h + deltaY;
-          if (newW < MIN_SIZE) newW = MIN_SIZE;
-          if (newH < MIN_SIZE) newH = MIN_SIZE;
 
-          // Snap
-          newW = snapToGrid(newW);
-          newH = snapToGrid(newH);
+          switch (resizing.edge) {
+            case "left": {
+              const candidateLeft = initialSize.left + dx;
+              const candidateW = initialSize.w - dx;
+              if (candidateW >= MIN_SIZE) {
+                newLeft = snapToGrid(candidateLeft);
+                newW = snapToGrid(candidateW);
+              }
+              break;
+            }
+            case "right": {
+              const candidateW = initialSize.w + dx;
+              if (candidateW >= MIN_SIZE) {
+                newW = snapToGrid(candidateW);
+              }
+              break;
+            }
+            case "top": {
+              const candidateTop = initialSize.top + dy;
+              const candidateH = initialSize.h - dy;
+              if (candidateH >= MIN_SIZE) {
+                newTop = snapToGrid(candidateTop);
+                newH = snapToGrid(candidateH);
+              }
+              break;
+            }
+            case "bottom": {
+              const candidateH = initialSize.h + dy;
+              if (candidateH >= MIN_SIZE) {
+                newH = snapToGrid(candidateH);
+              }
+              break;
+            }
+          }
 
-          const updated = { ...piece, width: newW, height: newH };
-          const newPieces = [...prev];
-          newPieces[index] = updated;
-          // After each resize step, we do a collision resolution pass
-          return resolveAllCollisions(newPieces);
+          const updated = {
+            ...piece,
+            left: newLeft,
+            top: newTop,
+            width: newW,
+            height: newH,
+          };
+          const newArr = [...prev];
+          newArr[idx] = updated;
+          return resolveAllCollisions(newArr);
         });
         evt.preventDefault();
         return;
@@ -290,9 +315,10 @@ export default function MosaicPage() {
       // Dragging
       if (draggingId) {
         setPieces((prev) => {
-          const index = prev.findIndex((p) => p.id === draggingId);
-          if (index === -1) return prev;
-          const piece = prev[index];
+          const idx = prev.findIndex((p) => p.id === draggingId);
+          if (idx === -1) return prev;
+          const piece = prev[idx];
+
           const newLeft = evt.clientX - containerRect.left - dragOffset.x;
           const newTop = evt.clientY - containerRect.top - dragOffset.y;
           const updated = {
@@ -300,50 +326,135 @@ export default function MosaicPage() {
             left: snapToGrid(newLeft),
             top: snapToGrid(newTop),
           };
-          const newPieces = [...prev];
-          newPieces[index] = updated;
-          return resolveAllCollisions(newPieces);
+
+          const newArr = [...prev];
+          newArr[idx] = updated;
+          return resolveAllCollisions(newArr);
         });
         evt.preventDefault();
       }
     },
-    [draggingId, resizingId, dragOffset, initialPointer, initialSize]
+    [resizing, draggingId, dragOffset, initialPointer, initialSize]
   );
 
-  /**
-   * handlePointerUp => stop dragging/resizing
-   */
+  /** Stop dragging/resizing. */
   const handlePointerUp = useCallback(() => {
     setDraggingId(null);
-    setResizingId(null);
+    setResizing(null);
   }, []);
 
-  /**
-   * handleResizeHandlePointerDown => start resizing
-   */
-  const handleResizeHandlePointerDown = useCallback(
-    (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
+  /** handleResizeEdgePointerDown => start resizing on the chosen edge. */
+  const handleResizeEdgePointerDown = useCallback(
+    (
+      evt: React.PointerEvent<HTMLDivElement>,
+      pieceId: string,
+      edge: string
+    ) => {
       if (!containerRef.current) return;
-      if (draggingId || resizingId) return;
+      if (draggingId || resizing) return;
 
       bringToFront(pieceId);
-      setResizingId(pieceId);
-
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const pointerX = evt.clientX - containerRect.left;
-      const pointerY = evt.clientY - containerRect.top;
-
       const piece = pieces.find((p) => p.id === pieceId);
       if (!piece) return;
 
-      setInitialPointer({ x: pointerX, y: pointerY });
-      setInitialSize({ w: piece.width, h: piece.height });
+      setResizing({ pieceId, edge });
+      setInitialSize({
+        w: piece.width,
+        h: piece.height,
+        top: piece.top,
+        left: piece.left,
+      });
+      setInitialPointer({ x: evt.clientX, y: evt.clientY });
 
       evt.preventDefault();
       evt.stopPropagation();
     },
-    [bringToFront, draggingId, resizingId, pieces]
+    [bringToFront, draggingId, resizing, pieces]
   );
+
+  /**
+   * handleContextMenu: right-click on a piece => open custom context menu
+   */
+  const handleContextMenu = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>, pieceId: string) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      setContextMenuOpen(true);
+      setContextMenuPosition({ x: evt.clientX, y: evt.clientY });
+      setContextPieceId(pieceId);
+    },
+    []
+  );
+
+  /**
+   * handleGlobalContextMenu: if user right-clicks outside any piece, close context menu
+   */
+  const handleGlobalContextMenu = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      if (evt.target === containerRef.current) {
+        evt.preventDefault();
+        setContextMenuOpen(false);
+        setContextPieceId(null);
+      }
+    },
+    []
+  );
+
+  /** handleChangeColor => set piece color. */
+  const handleChangeColor = useCallback(
+    (evt: React.ChangeEvent<HTMLInputElement>) => {
+      if (!contextPieceId) return;
+      const newColor = evt.target.value;
+      setPieces((prev) =>
+        prev.map((p) => {
+          if (p.id === contextPieceId && p.type === "color") {
+            return { ...p, color: newColor };
+          }
+          return p;
+        })
+      );
+      setContextMenuOpen(false);
+    },
+    [contextPieceId]
+  );
+
+  /** handleChangeImage => open file input to pick new image. */
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const handleChangeImageClick = useCallback(() => {
+    if (imageFileRef.current) {
+      imageFileRef.current.value = "";
+      imageFileRef.current.click();
+    }
+  }, []);
+  const handleChangeImageFile = useCallback(
+    async (evt: React.ChangeEvent<HTMLInputElement>) => {
+      if (!evt.target.files || !contextPieceId) return;
+      const file = evt.target.files[0];
+      if (!file) return;
+
+      const dataUrl = await readFileAsDataURL(file);
+      setPieces((prev) =>
+        prev.map((p) => {
+          if (p.id === contextPieceId && p.type === "image") {
+            return { ...p, src: dataUrl };
+          }
+          return p;
+        })
+      );
+      setContextMenuOpen(false);
+    },
+    [contextPieceId]
+  );
+
+  /** handleDeletePiece => remove piece. */
+  const handleDeletePiece = useCallback(() => {
+    if (!contextPieceId) return;
+    setPieces((prev) => prev.filter((p) => p.id !== contextPieceId));
+    setContextMenuOpen(false);
+  }, [contextPieceId]);
+
+  /** Utility to check if selected piece is color or image. */
+  const selectedPiece = pieces.find((p) => p.id === contextPieceId);
 
   return (
     <Box
@@ -351,8 +462,10 @@ export default function MosaicPage() {
       style={{ touchAction: "none" }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onContextMenu={handleGlobalContextMenu}
     >
-      <h1>Collision-Free Mosaic</h1>
+      <h1>Custom Context Menu Example</h1>
+
       <div className={styles.controls}>
         <input
           ref={fileInputRef}
@@ -362,13 +475,25 @@ export default function MosaicPage() {
           onChange={onFileChange}
           style={{ display: "none" }}
         />
-        <Button variant="contained" onClick={() => fileInputRef.current?.click()}>
+        <Button
+          variant="contained"
+          onClick={() => fileInputRef.current?.click()}
+        >
           Upload Images
         </Button>
         <Button variant="outlined" onClick={addColorBlocks}>
           Add Color Blocks
         </Button>
       </div>
+
+      {/* Hidden file input for changing image src in context menu */}
+      <input
+        ref={imageFileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={handleChangeImageFile}
+      />
 
       <div className={styles.mosaicContainer} ref={containerRef}>
         {pieces.map((piece) => {
@@ -379,7 +504,9 @@ export default function MosaicPage() {
               className={styles.mosaicPiece}
               style={{ width, height, top, left }}
               onPointerDown={(e) => handlePiecePointerDown(e, id)}
+              onContextMenu={(e) => handleContextMenu(e, id)}
             >
+              {/* Content */}
               {type === "color" ? (
                 <div
                   style={{
@@ -399,28 +526,119 @@ export default function MosaicPage() {
                   />
                 )
               )}
+
+              {/* Resize edges */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "6px",
+                  cursor: "row-resize",
+                }}
+                onPointerDown={(evt) =>
+                  handleResizeEdgePointerDown(evt, id, "top")
+                }
+              />
               <div
                 style={{
                   position: "absolute",
                   bottom: 0,
-                  right: 0,
-                  width: 28,
-                  height: 28,
-                  cursor: "se-resize",
+                  left: 0,
+                  width: "100%",
+                  height: "6px",
+                  cursor: "row-resize",
                 }}
-                onPointerDown={(e) => handleResizeHandlePointerDown(e, id)}
+                onPointerDown={(evt) =>
+                  handleResizeEdgePointerDown(evt, id, "bottom")
+                }
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  height: "100%",
+                  width: "6px",
+                  cursor: "col-resize",
+                }}
+                onPointerDown={(evt) =>
+                  handleResizeEdgePointerDown(evt, id, "left")
+                }
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  height: "100%",
+                  width: "6px",
+                  cursor: "col-resize",
+                }}
+                onPointerDown={(evt) =>
+                  handleResizeEdgePointerDown(evt, id, "right")
+                }
               />
             </div>
           );
         })}
       </div>
+
+      {/* Our custom context menu, shown if contextMenuOpen */}
+      {contextMenuOpen && selectedPiece && (
+        <div
+          style={{
+            position: "fixed",
+            top: contextMenuPosition.y,
+            left: contextMenuPosition.x,
+            background: "white",
+            border: "1px solid #ccc",
+            borderRadius: "4px",
+            padding: "8px",
+            zIndex: 9999,
+          }}
+        >
+          {selectedPiece.type === "color" && (
+            <label style={{ display: "block", marginBottom: "8px" }}>
+              Change color:
+              <input
+                type="color"
+                style={{ marginLeft: "8px" }}
+                onChange={handleChangeColor}
+              />
+            </label>
+          )}
+
+          {selectedPiece.type === "image" && (
+            <>
+              <Button
+                onClick={handleChangeImageClick}
+                variant="outlined"
+                size="small"
+                sx={{ mb: 1 }}
+              >
+                Change Image
+              </Button>
+              <br />
+            </>
+          )}
+
+          <Button
+            onClick={handleDeletePiece}
+            variant="contained"
+            color="error"
+            size="small"
+          >
+            Delete
+          </Button>
+        </div>
+      )}
     </Box>
   );
 }
 
-/**
- * Utility to convert file into a data URL
- */
+/** readFileAsDataURL => create Data URL from file. */
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
