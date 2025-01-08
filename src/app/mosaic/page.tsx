@@ -35,12 +35,21 @@ export default function MosaicPage() {
 
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
 
   // Resizing state
   const [resizingId, setResizingId] = useState<string | null>(null);
-  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [initialPointer, setInitialPointer] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [initialSize, setInitialSize] = useState<{ w: number; h: number }>({
+    w: 0,
+    h: 0,
+  });
+  const [initialPointer, setInitialPointer] = useState<{
+    x: number;
+    y: number;
+  }>({ x: 0, y: 0 });
 
   /**
    * onFileChange handles normal images (non-hero).
@@ -265,7 +274,10 @@ export default function MosaicPage() {
           onChange={onFileChange}
           style={{ display: "none" }}
         />
-        <Button variant="contained" onClick={() => fileInputRef.current?.click()}>
+        <Button
+          variant="contained"
+          onClick={() => fileInputRef.current?.click()}
+        >
           Upload Images
         </Button>
         {/* Hero image */}
@@ -276,7 +288,10 @@ export default function MosaicPage() {
           onChange={onHeroFileChange}
           style={{ display: "none" }}
         />
-        <Button variant="outlined" onClick={() => heroFileInputRef.current?.click()}>
+        <Button
+          variant="outlined"
+          onClick={() => heroFileInputRef.current?.click()}
+        >
           Upload Hero Image
         </Button>
 
@@ -303,7 +318,11 @@ export default function MosaicPage() {
             >
               {type === "color" ? (
                 <div
-                  style={{ width: "100%", height: "100%", backgroundColor: color }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    backgroundColor: color,
+                  }}
                 />
               ) : (
                 src && (
@@ -325,9 +344,7 @@ export default function MosaicPage() {
                   height: "14px",
                   bottom: 0,
                   right: 0,
-                  backgroundColor: "#cccccc",
                   cursor: "se-resize",
-                  border: "1px solid #444",
                 }}
                 onPointerDown={(e) => handleResizeHandlePointerDown(e, id)}
               />
