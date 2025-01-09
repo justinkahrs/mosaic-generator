@@ -16,7 +16,6 @@ import {
   Switch,
   FormControlLabel,
   Button,
-  Box,
 } from "@mui/material";
 import MosaicPiece from "./MosaicPiece";
 import MosaicContextMenu from "./MosaicContextMenu";
