@@ -21,49 +21,46 @@ import {
   resolveAllCollisions,
   findNonOverlappingPlacement,
 } from "@/utils/mosaicUtils";
+import {
+  beginDrag,
+  updateDrag,
+  endDrag,
+  beginResize,
+  updateResize,
+  endResize,
+} from "@/utils/dragResizeUtils";
 
 /** Constants and Utility Functions **/
 const MIN_SIZE = 30;
 
 /** Mosaic Component **/
 export default function Mosaic() {
-  const [pieces, setPieces] = useState<MosaicPieceData[]>([]);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  // Let the user toggle snapping
-  const [snapEnabled, setSnapEnabled] = useState(true);
-
-  // Helper function to conditionally snap
-  const maybeSnap = useCallback(
-    (val: number) => (snapEnabled ? snapToGrid(val) : val),
-    [snapEnabled]
-  );
-
-  // Dragging
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-
-  // Resizing
-  const [resizing, setResizing] = useState<{
-    pieceId: string;
-    edge: string;
-  } | null>(null);
-  const [initialSize, setInitialSize] = useState({
-    w: 0,
-    h: 0,
-    top: 0,
-    left: 0,
-  });
-  const [initialPointer, setInitialPointer] = useState({ x: 0, y: 0 });
-
-  // Context menu state
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<{
     x: number;
     y: number;
   }>({ x: 0, y: 0 });
   const [contextPieceId, setContextPieceId] = useState<string | null>(null);
-
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [initialPointer, setInitialPointer] = useState({ x: 0, y: 0 });
+  const [initialSize, setInitialSize] = useState({
+    w: 0,
+    h: 0,
+    top: 0,
+    left: 0,
+  });
+  const [pieces, setPieces] = useState<MosaicPieceData[]>([]);
+  const [resizing, setResizing] = useState<{
+    pieceId: string;
+    edge: string;
+  } | null>(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const maybeSnap = useCallback(
+    (val: number) => (snapEnabled ? snapToGrid(val) : val),
+    [snapEnabled]
+  );
   /** Add images. */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const onFileChange = async (evt: ChangeEvent<HTMLInputElement>) => {
@@ -137,16 +134,7 @@ export default function Mosaic() {
       if (!containerRef.current) return;
       if (resizing) return; // skip if resizing
 
-      bringToFront(pieceId);
-      setDraggingId(pieceId);
-
-      const rect = evt.currentTarget.getBoundingClientRect();
-      setDragOffset({
-        x: evt.clientX - rect.left,
-        y: evt.clientY - rect.top,
-      });
-      evt.preventDefault();
-      evt.stopPropagation();
+      beginDrag(evt, pieceId, bringToFront, setDraggingId, setDragOffset);
     },
     [bringToFront, resizing]
   );
@@ -159,88 +147,29 @@ export default function Mosaic() {
 
       // Resizing
       if (resizing) {
-        setPieces((prev) => {
-          const idx = prev.findIndex((p) => p.id === resizing.pieceId);
-          if (idx === -1) return prev;
-          const piece = prev[idx];
-
-          const dx = evt.clientX - initialPointer.x;
-          const dy = evt.clientY - initialPointer.y;
-
-          let newLeft = piece.left;
-          let newTop = piece.top;
-          let newW = piece.width;
-          let newH = piece.height;
-
-          switch (resizing.edge) {
-            case "left": {
-              const candidateLeft = initialSize.left + dx;
-              const candidateW = initialSize.w - dx;
-              if (candidateW >= MIN_SIZE) {
-                newLeft = maybeSnap(candidateLeft);
-                newW = maybeSnap(candidateW);
-              }
-              break;
-            }
-            case "right": {
-              const candidateW = initialSize.w + dx;
-              if (candidateW >= MIN_SIZE) {
-                newW = maybeSnap(candidateW);
-              }
-              break;
-            }
-            case "top": {
-              const candidateTop = initialSize.top + dy;
-              const candidateH = initialSize.h - dy;
-              if (candidateH >= MIN_SIZE) {
-                newTop = maybeSnap(candidateTop);
-                newH = maybeSnap(candidateH);
-              }
-              break;
-            }
-            case "bottom": {
-              const candidateH = initialSize.h + dy;
-              if (candidateH >= MIN_SIZE) {
-                newH = maybeSnap(candidateH);
-              }
-              break;
-            }
-          }
-
-          const updated = {
-            ...piece,
-            left: newLeft,
-            top: newTop,
-            width: newW,
-            height: newH,
-          };
-          const newArr = [...prev];
-          newArr[idx] = updated;
-          return resolveAllCollisions(newArr, maybeSnap);
-        });
+        updateResize(
+          evt,
+          resizing,
+          initialPointer,
+          initialSize,
+          MIN_SIZE,
+          maybeSnap,
+          setPieces
+        );
         evt.preventDefault();
         return;
       }
 
       // Dragging
       if (draggingId) {
-        setPieces((prev) => {
-          const idx = prev.findIndex((p) => p.id === draggingId);
-          if (idx === -1) return prev;
-          const piece = prev[idx];
-
-          const newLeft = evt.clientX - containerRect.left - dragOffset.x;
-          const newTop = evt.clientY - containerRect.top - dragOffset.y;
-          const updated = {
-            ...piece,
-            left: maybeSnap(newLeft),
-            top: maybeSnap(newTop),
-          };
-
-          const newArr = [...prev];
-          newArr[idx] = updated;
-          return resolveAllCollisions(newArr, maybeSnap);
-        });
+        updateDrag(
+          evt,
+          containerRect,
+          draggingId,
+          dragOffset,
+          maybeSnap,
+          setPieces
+        );
         evt.preventDefault();
       }
     },
@@ -249,9 +178,13 @@ export default function Mosaic() {
 
   /** Stop dragging/resizing. */
   const handlePointerUp = useCallback(() => {
-    setDraggingId(null);
-    setResizing(null);
-  }, []);
+    if (draggingId) {
+      endDrag(setDraggingId);
+    }
+    if (resizing) {
+      endResize(setResizing);
+    }
+  }, [draggingId, resizing]);
 
   /** handleResizeEdgePointerDown => start resizing on the chosen edge. */
   const handleResizeEdgePointerDown = useCallback(
@@ -263,21 +196,16 @@ export default function Mosaic() {
       if (!containerRef.current) return;
       if (draggingId || resizing) return;
 
-      bringToFront(pieceId);
-      const piece = pieces.find((p) => p.id === pieceId);
-      if (!piece) return;
-
-      setResizing({ pieceId, edge });
-      setInitialSize({
-        w: piece.width,
-        h: piece.height,
-        top: piece.top,
-        left: piece.left,
-      });
-      setInitialPointer({ x: evt.clientX, y: evt.clientY });
-
-      evt.preventDefault();
-      evt.stopPropagation();
+      beginResize(
+        evt,
+        pieceId,
+        edge,
+        bringToFront,
+        setResizing,
+        setInitialSize,
+        setInitialPointer,
+        pieces
+      );
     },
     [bringToFront, draggingId, resizing, pieces]
   );
