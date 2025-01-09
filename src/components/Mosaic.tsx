@@ -12,6 +12,7 @@ import {
 import { Button, Box } from "@mui/material";
 import MosaicPiece from "./MosaicPiece";
 import MosaicContextMenu from "./MosaicContextMenu";
+import ColorPalette from "./ColorPalette";
 import styles from "@/app/page.module.css";
 import type { MosaicPiece as MosaicPieceData } from "@/types/types";
 import { generateUUID } from "@/utils/UUID";
@@ -57,10 +58,41 @@ export default function Mosaic() {
     edge: string;
   } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
+
+  // New color palette: four default colors
+  const [colorPalette, setColorPalette] = useState<string[]>([
+    "#FF0000", // red
+    "#00FF00", // lime
+    "#0000FF", // blue
+    "#FFFF00", // yellow
+  ]);
+
+  // Handle color palette changes => update colorPalette state
+  const handlePaletteChange = useCallback((index: number, newColor: string) => {
+    setColorPalette((prev) => {
+      const updated = [...prev];
+      updated[index] = newColor;
+      return updated;
+    });
+    // Also update any pieces referencing this palette index
+    setPieces((prev) =>
+      prev.map((p) => {
+        if (p.paletteIndex === index) {
+          return {
+            ...p,
+            color: newColor, // keep a color field consistent if needed
+          };
+        }
+        return p;
+      })
+    );
+  }, []);
+
   const maybeSnap = useCallback(
     (val: number) => (snapEnabled ? snapToGrid(val) : val),
     [snapEnabled]
   );
+
   /** Add images. */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const onFileChange = async (evt: ChangeEvent<HTMLInputElement>) => {
@@ -90,15 +122,15 @@ export default function Mosaic() {
     setPieces(currentPieces);
   };
 
-  /** Add color blocks. */
+  /** Add color blocks => use every color in palette. */
   const addColorBlocks = () => {
     let currentPieces = [...pieces];
-    const colors = ["#FFC107", "#8BC34A", "#F44336", "#3F51B5", "#E91E63"];
-    for (const c of colors) {
+    for (let i = 0; i < colorPalette.length; i++) {
       const candidate: MosaicPieceData = {
         id: generateUUID(),
         type: "color",
-        color: c,
+        color: colorPalette[i],
+        paletteIndex: i,
         width: maybeSnap(60 + Math.random() * 60),
         height: maybeSnap(60 + Math.random() * 60),
         top: maybeSnap(Math.random() * 200),
@@ -302,6 +334,14 @@ export default function Mosaic() {
       onPointerUp={handlePointerUp}
       onContextMenu={handleGlobalContextMenu}
     >
+      {/* ColorPalette */}
+      <Box sx={{ marginBottom: 2 }}>
+        <ColorPalette
+          colorPalette={colorPalette}
+          onChangeColor={handlePaletteChange}
+        />
+      </Box>
+
       <div className={styles.controls}>
         <div style={{ display: "flex", gap: "8px" }}>
           <input
@@ -343,15 +383,23 @@ export default function Mosaic() {
       />
 
       <div className={styles.mosaicContainer} ref={containerRef}>
-        {pieces.map((piece) => (
-          <MosaicPiece
-            key={piece.id}
-            piece={piece}
-            onPointerDown={handlePiecePointerDown}
-            onContextMenu={handleContextMenu}
-            onResizeEdgePointerDown={handleResizeEdgePointerDown}
-          />
-        ))}
+        {pieces.map((piece) => {
+          // If paletteIndex is defined, override the piece.color
+          const displayColor =
+            piece.type === "color" && piece.paletteIndex !== undefined
+              ? colorPalette[piece.paletteIndex]
+              : piece.color;
+
+          return (
+            <MosaicPiece
+              key={piece.id}
+              piece={{ ...piece, color: displayColor }}
+              onPointerDown={handlePiecePointerDown}
+              onContextMenu={handleContextMenu}
+              onResizeEdgePointerDown={handleResizeEdgePointerDown}
+            />
+          );
+        })}
       </div>
 
       <MosaicContextMenu
