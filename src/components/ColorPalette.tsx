@@ -69,7 +69,7 @@ export default function ColorPalette({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Render color swatches */}
-      <Box sx={{ display: "flex", gap: 2 }}>
+      <Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
         {colorPalette.map((color, index) => (
           <div
             key={`${color + index}`}
