@@ -9,17 +9,19 @@ interface MosaicContextMenuProps {
   open: boolean;
   position: { x: number; y: number };
   piece: MosaicPiece | null;
-  onChangeColor: (evt: React.ChangeEvent<HTMLInputElement>) => void;
+  colorPalette: string[];
+  onChangeColorIndex: (index: number) => void;
   onChangeImageClick: () => void;
   onDeletePiece: () => void;
   closeMenu: () => void; // Function to close the menu
 }
 
 export default function MosaicContextMenu({
+  colorPalette,
   open,
   position,
   piece,
-  onChangeColor,
+  onChangeColorIndex,
   onChangeImageClick,
   onDeletePiece,
   closeMenu,
@@ -64,14 +66,21 @@ export default function MosaicContextMenu({
       }}
     >
       {piece.type === "color" && (
-        <label style={{ display: "block", marginBottom: "8px" }}>
-          Change color:
-          <input
-            type="color"
-            style={{ marginLeft: "8px" }}
-            onChange={onChangeColor}
-          />
-        </label>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+          {colorPalette.map((clr, index) => (
+            <div
+              key={`${clr}-${index}`}
+              style={{
+                width: 24,
+                height: 24,
+                backgroundColor: clr,
+                cursor: "pointer",
+                border: "1px solid #999",
+              }}
+              onClick={() => onChangeColorIndex(index)}
+            />
+          ))}
+        </div>
       )}
 
       {piece.type === "image" && (

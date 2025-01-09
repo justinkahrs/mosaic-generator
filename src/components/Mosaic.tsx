@@ -270,23 +270,19 @@ export default function Mosaic() {
     []
   );
 
-  /** handleChangeColor => set piece color. */
-  const handleChangeColor = useCallback(
-    (evt: ChangeEvent<HTMLInputElement>) => {
-      if (!contextPieceId) return;
-      const newColor = evt.target.value;
-      setPieces((prev) =>
-        prev.map((p) => {
-          if (p.id === contextPieceId && p.type === "color") {
-            return { ...p, color: newColor };
-          }
-          return p;
-        })
-      );
-      setContextMenuOpen(false);
-    },
-    [contextPieceId]
-  );
+  /** handleChangeColorIndex => set piece color from palette. */
+  const handleChangeColorIndex = useCallback((index: number) => {
+    if (!contextPieceId) return;
+    setPieces((prev) =>
+      prev.map((p) => {
+        if (p.id === contextPieceId && p.type === "color") {
+          return { ...p, color: colorPalette[index], paletteIndex: index };
+        }
+        return p;
+      })
+    );
+    setContextMenuOpen(false);
+  }, [contextPieceId, colorPalette]);
 
   /** handleChangeImage => open file input to pick new image. */
   const imageFileRef = useRef<HTMLInputElement | null>(null);
@@ -406,7 +402,8 @@ export default function Mosaic() {
         open={contextMenuOpen && !!selectedPiece}
         position={contextMenuPosition}
         piece={selectedPiece || null}
-        onChangeColor={handleChangeColor}
+        colorPalette={colorPalette}
+        onChangeColorIndex={handleChangeColorIndex}
         onChangeImageClick={handleChangeImageClick}
         onDeletePiece={handleDeletePiece}
         closeMenu={() => setContextMenuOpen(false)}
