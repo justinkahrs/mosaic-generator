@@ -1,33 +1,29 @@
 "use client";
 
-import type React from "react";
-import { useState, useRef, useCallback } from "react";
-import styles from "./page.module.css";
-import Image from "next/image";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  MouseEvent,
+  PointerEvent,
+  ChangeEvent,
+} from "react";
 import { Button, Box } from "@mui/material";
+import Image from "next/image";
+import MosaicPiece from "./MosaicPiece";
+import styles from "@/app/page.module.css";
+import type { MosaicPiece as MosaicPieceData } from "@/types/types";
+import { generateUUID } from "@/utils/UUID";
 
-interface MosaicPiece {
-  id: string;
-  type: "image" | "color";
-  src?: string;
-  color?: string;
-  width: number;
-  height: number;
-  top: number;
-  left: number;
-}
-
-// Grid snapping
+/** Constants and Utility Functions **/
 const GRID_SIZE = 20;
 const MIN_SIZE = 30;
 
-/** Snap a value to the grid. */
 function snapToGrid(value: number): number {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
-/** Check if two pieces overlap. */
-function doOverlap(a: MosaicPiece, b: MosaicPiece): boolean {
+function doOverlap(a: MosaicPieceData, b: MosaicPieceData): boolean {
   const rectA = {
     left: a.left,
     right: a.left + a.width,
@@ -49,12 +45,11 @@ function doOverlap(a: MosaicPiece, b: MosaicPiece): boolean {
   );
 }
 
-/** Nudges a piece until no overlap or hits max iteration. */
 function nudgeUntilNoOverlap(
-  piece: MosaicPiece,
-  others: MosaicPiece[],
+  piece: MosaicPieceData,
+  others: MosaicPieceData[],
   direction: { x: number; y: number }
-): MosaicPiece {
+): MosaicPieceData {
   let updated = piece;
   const MAX_ITER = 200;
   let iter = 0;
@@ -77,8 +72,7 @@ function nudgeUntilNoOverlap(
   return updated;
 }
 
-/** Repeatedly nudge pieces that collide until stable. */
-function resolveAllCollisions(pieces: MosaicPiece[]): MosaicPiece[] {
+function resolveAllCollisions(pieces: MosaicPieceData[]): MosaicPieceData[] {
   const MAX_GLOBAL_ITER = 500;
   let iteration = 0;
   const updatedPieces = [...pieces];
@@ -111,11 +105,10 @@ function resolveAllCollisions(pieces: MosaicPiece[]): MosaicPiece[] {
   return updatedPieces;
 }
 
-/** Insert a new piece, find a non-overlapping place by shifting down if collisions. */
 function findNonOverlappingPlacement(
-  newPiece: MosaicPiece,
-  existingPieces: MosaicPiece[]
-): MosaicPiece {
+  newPiece: MosaicPieceData,
+  existingPieces: MosaicPieceData[]
+): MosaicPieceData {
   const MAX_PLACE_ITER = 500;
   const candidate = { ...newPiece };
   let iteration = 0;
@@ -130,8 +123,21 @@ function findNonOverlappingPlacement(
   return candidate;
 }
 
-export default function MosaicPage() {
-  const [pieces, setPieces] = useState<MosaicPiece[]>([]);
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("File reading error"));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Mosaic Component **/
+export default function Mosaic() {
+  const [pieces, setPieces] = useState<MosaicPieceData[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Dragging
@@ -164,15 +170,15 @@ export default function MosaicPage() {
 
   /** Add images. */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const onFileChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = async (evt: ChangeEvent<HTMLInputElement>) => {
     if (!evt.target.files) return;
     const files = Array.from(evt.target.files);
 
     let currentPieces = [...pieces];
     for (const file of files) {
       const dataUrl = await readFileAsDataURL(file);
-      const candidate: MosaicPiece = {
-        id: crypto.randomUUID(),
+      const candidate: MosaicPieceData = {
+        id: generateUUID(),
         type: "image",
         src: dataUrl,
         width: snapToGrid(150 + Math.random() * 100),
@@ -192,8 +198,8 @@ export default function MosaicPage() {
     let currentPieces = [...pieces];
     const colors = ["#FFC107", "#8BC34A", "#F44336", "#3F51B5", "#E91E63"];
     for (const c of colors) {
-      const candidate: MosaicPiece = {
-        id: crypto.randomUUID(),
+      const candidate: MosaicPieceData = {
+        id: generateUUID(),
         type: "color",
         color: c,
         width: snapToGrid(60 + Math.random() * 60),
@@ -223,7 +229,7 @@ export default function MosaicPage() {
 
   /** handlePiecePointerDown => start dragging if not resizing. */
   const handlePiecePointerDown = useCallback(
-    (evt: React.PointerEvent<HTMLDivElement>, pieceId: string) => {
+    (evt: PointerEvent<HTMLDivElement>, pieceId: string) => {
       if (!containerRef.current) return;
       if (resizing) return; // skip if resizing
 
@@ -243,7 +249,7 @@ export default function MosaicPage() {
 
   /** handlePointerMove => handle dragging or resizing. */
   const handlePointerMove = useCallback(
-    (evt: React.PointerEvent<HTMLDivElement>) => {
+    (evt: PointerEvent<HTMLDivElement>) => {
       if (!containerRef.current) return;
       const containerRect = containerRef.current.getBoundingClientRect();
 
@@ -372,11 +378,9 @@ export default function MosaicPage() {
     [bringToFront, draggingId, resizing, pieces]
   );
 
-  /**
-   * handleContextMenu: right-click on a piece => open custom context menu
-   */
+  /** handleContextMenu: right-click on a piece => open custom context menu */
   const handleContextMenu = useCallback(
-    (evt: React.MouseEvent<HTMLDivElement>, pieceId: string) => {
+    (evt: MouseEvent<HTMLDivElement>, pieceId: string) => {
       evt.preventDefault();
       evt.stopPropagation();
       setContextMenuOpen(true);
@@ -386,11 +390,9 @@ export default function MosaicPage() {
     []
   );
 
-  /**
-   * handleGlobalContextMenu: if user right-clicks outside any piece, close context menu
-   */
+  /** handleGlobalContextMenu: if user right-clicks outside any piece, close context menu */
   const handleGlobalContextMenu = useCallback(
-    (evt: React.MouseEvent<HTMLDivElement>) => {
+    (evt: MouseEvent<HTMLDivElement>) => {
       if (evt.target === containerRef.current) {
         evt.preventDefault();
         setContextMenuOpen(false);
@@ -402,7 +404,7 @@ export default function MosaicPage() {
 
   /** handleChangeColor => set piece color. */
   const handleChangeColor = useCallback(
-    (evt: React.ChangeEvent<HTMLInputElement>) => {
+    (evt: ChangeEvent<HTMLInputElement>) => {
       if (!contextPieceId) return;
       const newColor = evt.target.value;
       setPieces((prev) =>
@@ -427,7 +429,7 @@ export default function MosaicPage() {
     }
   }, []);
   const handleChangeImageFile = useCallback(
-    async (evt: React.ChangeEvent<HTMLInputElement>) => {
+    async (evt: ChangeEvent<HTMLInputElement>) => {
       if (!evt.target.files || !contextPieceId) return;
       const file = evt.target.files[0];
       if (!file) return;
@@ -453,7 +455,6 @@ export default function MosaicPage() {
     setContextMenuOpen(false);
   }, [contextPieceId]);
 
-  /** Utility to check if selected piece is color or image. */
   const selectedPiece = pieces.find((p) => p.id === contextPieceId);
 
   return (
@@ -464,8 +465,6 @@ export default function MosaicPage() {
       onPointerUp={handlePointerUp}
       onContextMenu={handleGlobalContextMenu}
     >
-      <h1>Custom Context Menu Example</h1>
-
       <div className={styles.controls}>
         <input
           ref={fileInputRef}
@@ -478,6 +477,7 @@ export default function MosaicPage() {
         <Button
           variant="contained"
           onClick={() => fileInputRef.current?.click()}
+          sx={{ mr: 1 }}
         >
           Upload Images
         </Button>
@@ -496,93 +496,15 @@ export default function MosaicPage() {
       />
 
       <div className={styles.mosaicContainer} ref={containerRef}>
-        {pieces.map((piece) => {
-          const { id, type, src, color, width, height, top, left } = piece;
-          return (
-            <div
-              key={id}
-              className={styles.mosaicPiece}
-              style={{ width, height, top, left }}
-              onPointerDown={(e) => handlePiecePointerDown(e, id)}
-              onContextMenu={(e) => handleContextMenu(e, id)}
-            >
-              {/* Content */}
-              {type === "color" ? (
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    backgroundColor: color,
-                  }}
-                />
-              ) : (
-                src && (
-                  <Image
-                    src={src}
-                    alt="mosaic-piece"
-                    width={width}
-                    height={height}
-                    style={{ objectFit: "cover" }}
-                  />
-                )
-              )}
-
-              {/* Resize edges */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "6px",
-                  cursor: "row-resize",
-                }}
-                onPointerDown={(evt) =>
-                  handleResizeEdgePointerDown(evt, id, "top")
-                }
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "6px",
-                  cursor: "row-resize",
-                }}
-                onPointerDown={(evt) =>
-                  handleResizeEdgePointerDown(evt, id, "bottom")
-                }
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  height: "100%",
-                  width: "6px",
-                  cursor: "col-resize",
-                }}
-                onPointerDown={(evt) =>
-                  handleResizeEdgePointerDown(evt, id, "left")
-                }
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: 0,
-                  height: "100%",
-                  width: "6px",
-                  cursor: "col-resize",
-                }}
-                onPointerDown={(evt) =>
-                  handleResizeEdgePointerDown(evt, id, "right")
-                }
-              />
-            </div>
-          );
-        })}
+        {pieces.map((piece) => (
+          <MosaicPiece
+            key={piece.id}
+            piece={piece}
+            onPointerDown={handlePiecePointerDown}
+            onContextMenu={handleContextMenu}
+            onResizeEdgePointerDown={handleResizeEdgePointerDown}
+          />
+        ))}
       </div>
 
       {/* Our custom context menu, shown if contextMenuOpen */}
@@ -636,17 +558,4 @@ export default function MosaicPage() {
       )}
     </Box>
   );
-}
-
-/** readFileAsDataURL => create Data URL from file. */
-function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("File reading error"));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }
