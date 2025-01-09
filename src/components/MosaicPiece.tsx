@@ -103,6 +103,51 @@ export default function MosaicPiece({
         }}
         onPointerDown={(evt) => onResizeEdgePointerDown(evt, id, "right")}
       />
+      {/* Corner resize handles */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "10px",
+          height: "10px",
+          cursor: "nwse-resize",
+        }}
+        onPointerDown={(evt) => onResizeEdgePointerDown(evt, id, "top-left")}
+      />
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: "10px",
+          height: "10px",
+          cursor: "nesw-resize",
+        }}
+        onPointerDown={(evt) => onResizeEdgePointerDown(evt, id, "top-right")}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          width: "10px",
+          height: "10px",
+          cursor: "nesw-resize",
+        }}
+        onPointerDown={(evt) => onResizeEdgePointerDown(evt, id, "bottom-left")}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          right: 0,
+          width: "10px",
+          height: "10px",
+          cursor: "nwse-resize",
+        }}
+        onPointerDown={(evt) => onResizeEdgePointerDown(evt, id, "bottom-right")}
+      />
     </div>
   );
 }

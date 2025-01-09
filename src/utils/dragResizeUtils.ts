@@ -192,6 +192,50 @@ export function updateResize(
         }
         break;
       }
+      case "top-left": {
+        const candidateLeft = initialSize.left + dx;
+        const candidateW = initialSize.w - dx;
+        const candidateTop = initialSize.top + dy;
+        const candidateH = initialSize.h - dy;
+        if (candidateW >= MIN_SIZE && candidateH >= MIN_SIZE) {
+          newLeft = maybeSnap(candidateLeft);
+          newW = maybeSnap(candidateW);
+          newTop = maybeSnap(candidateTop);
+          newH = maybeSnap(candidateH);
+        }
+        break;
+      }
+      case "top-right": {
+        const candidateTop = initialSize.top + dy;
+        const candidateH = initialSize.h - dy;
+        const candidateW = initialSize.w + dx;
+        if (candidateW >= MIN_SIZE && candidateH >= MIN_SIZE) {
+          newW = maybeSnap(candidateW);
+          newTop = maybeSnap(candidateTop);
+          newH = maybeSnap(candidateH);
+        }
+        break;
+      }
+      case "bottom-left": {
+        const candidateLeft = initialSize.left + dx;
+        const candidateW = initialSize.w - dx;
+        const candidateH = initialSize.h + dy;
+        if (candidateW >= MIN_SIZE && candidateH >= MIN_SIZE) {
+          newLeft = maybeSnap(candidateLeft);
+          newW = maybeSnap(candidateW);
+          newH = maybeSnap(candidateH);
+        }
+        break;
+      }
+      case "bottom-right": {
+        const candidateW = initialSize.w + dx;
+        const candidateH = initialSize.h + dy;
+        if (candidateW >= MIN_SIZE && candidateH >= MIN_SIZE) {
+          newW = maybeSnap(candidateW);
+          newH = maybeSnap(candidateH);
+        }
+        break;
+      }
     }
 
     const updated = {
