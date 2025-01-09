@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import { Box, Button, Menu, MenuItem } from "@mui/material";
 import { HexColorPicker } from "react-colorful";
 
@@ -52,7 +54,6 @@ export default function ColorPalette({
             style={{
               width: 32,
               height: 32,
-              // borderRadius: "50%",
               backgroundColor: color,
               cursor: "pointer",
               border: "2px solid #999",
@@ -60,6 +61,7 @@ export default function ColorPalette({
             onClick={(event) => handleSwatchClick(event, index)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
+                // biome-ignore lint/suspicious/noExplicitAny: <explanation>
                 handleSwatchClick(e as any, index);
               }
             }}

@@ -68,8 +68,12 @@ export default function MosaicContextMenu({
       {piece.type === "color" && (
         <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
           {colorPalette.map((clr, index) => (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: <explanation>
             <div
-              key={`${clr}-${index}`}
+              key={`${clr}-${
+                // biome-ignore lint/suspicious/noArrayIndexKey: <explanation>
+                index
+              }`}
               style={{
                 width: 24,
                 height: 24,
