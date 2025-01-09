@@ -1,16 +1,17 @@
 "use client";
 
-import React, {
+import type React from "react";
+import {
   useState,
   useRef,
   useCallback,
-  MouseEvent,
-  PointerEvent,
-  ChangeEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ChangeEvent,
 } from "react";
 import { Button, Box } from "@mui/material";
-import Image from "next/image";
 import MosaicPiece from "./MosaicPiece";
+import MosaicContextMenu from "./MosaicContextMenu";
 import styles from "@/app/page.module.css";
 import type { MosaicPiece as MosaicPieceData } from "@/types/types";
 import { generateUUID } from "@/utils/UUID";
@@ -23,6 +24,22 @@ function snapToGrid(value: number): number {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
+/**
+ * readFileAsDataURL => create Data URL from file.
+ */
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("File reading error"));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Check if two pieces overlap. */
 function doOverlap(a: MosaicPieceData, b: MosaicPieceData): boolean {
   const rectA = {
     left: a.left,
@@ -45,10 +62,12 @@ function doOverlap(a: MosaicPieceData, b: MosaicPieceData): boolean {
   );
 }
 
+/** Nudges a piece until no overlap or hits max iteration. */
 function nudgeUntilNoOverlap(
   piece: MosaicPieceData,
   others: MosaicPieceData[],
-  direction: { x: number; y: number }
+  direction: { x: number; y: number },
+  maybeSnap: (val: number) => number
 ): MosaicPieceData {
   let updated = piece;
   const MAX_ITER = 200;
@@ -61,8 +80,8 @@ function nudgeUntilNoOverlap(
 
     updated = {
       ...updated,
-      left: updated.left + direction.x * GRID_SIZE,
-      top: updated.top + direction.y * GRID_SIZE,
+      left: maybeSnap(updated.left + direction.x * GRID_SIZE),
+      top: maybeSnap(updated.top + direction.y * GRID_SIZE),
     };
     iter++;
     if (iter > MAX_ITER) {
@@ -72,7 +91,11 @@ function nudgeUntilNoOverlap(
   return updated;
 }
 
-function resolveAllCollisions(pieces: MosaicPieceData[]): MosaicPieceData[] {
+/** Repeatedly nudge pieces that collide until stable. */
+function resolveAllCollisions(
+  pieces: MosaicPieceData[],
+  maybeSnap: (val: number) => number
+): MosaicPieceData[] {
   const MAX_GLOBAL_ITER = 500;
   let iteration = 0;
   const updatedPieces = [...pieces];
@@ -92,7 +115,8 @@ function resolveAllCollisions(pieces: MosaicPieceData[]): MosaicPieceData[] {
           const newP2 = nudgeUntilNoOverlap(
             p2,
             updatedPieces.filter((_, idx) => idx !== j),
-            dir
+            dir,
+            maybeSnap
           );
           updatedPieces[j] = newP2;
         }
@@ -105,9 +129,11 @@ function resolveAllCollisions(pieces: MosaicPieceData[]): MosaicPieceData[] {
   return updatedPieces;
 }
 
+/** Insert a new piece, find a non-overlapping place by shifting down if collisions. */
 function findNonOverlappingPlacement(
   newPiece: MosaicPieceData,
-  existingPieces: MosaicPieceData[]
+  existingPieces: MosaicPieceData[],
+  maybeSnap: (val: number) => number
 ): MosaicPieceData {
   const MAX_PLACE_ITER = 500;
   const candidate = { ...newPiece };
@@ -117,28 +143,25 @@ function findNonOverlappingPlacement(
     if (!anyOverlap) {
       return candidate;
     }
-    candidate.top += GRID_SIZE;
+    candidate.top = maybeSnap(candidate.top + GRID_SIZE);
     iteration++;
   }
   return candidate;
-}
-
-function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("File reading error"));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }
 
 /** Mosaic Component **/
 export default function Mosaic() {
   const [pieces, setPieces] = useState<MosaicPieceData[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Let the user toggle snapping
+  const [snapEnabled, setSnapEnabled] = useState(true);
+
+  // Helper function to conditionally snap
+  const maybeSnap = useCallback(
+    (val: number) => (snapEnabled ? snapToGrid(val) : val),
+    [snapEnabled]
+  );
 
   // Dragging
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -162,10 +185,7 @@ export default function Mosaic() {
   const [contextMenuPosition, setContextMenuPosition] = useState<{
     x: number;
     y: number;
-  }>({
-    x: 0,
-    y: 0,
-  });
+  }>({ x: 0, y: 0 });
   const [contextPieceId, setContextPieceId] = useState<string | null>(null);
 
   /** Add images. */
@@ -181,14 +201,18 @@ export default function Mosaic() {
         id: generateUUID(),
         type: "image",
         src: dataUrl,
-        width: snapToGrid(150 + Math.random() * 100),
-        height: snapToGrid(100 + Math.random() * 80),
-        top: snapToGrid(Math.random() * 200),
-        left: snapToGrid(Math.random() * 200),
+        width: maybeSnap(150 + Math.random() * 100),
+        height: maybeSnap(100 + Math.random() * 80),
+        top: maybeSnap(Math.random() * 200),
+        left: maybeSnap(Math.random() * 200),
       };
-      const placed = findNonOverlappingPlacement(candidate, currentPieces);
+      const placed = findNonOverlappingPlacement(
+        candidate,
+        currentPieces,
+        maybeSnap
+      );
       currentPieces.push(placed);
-      currentPieces = resolveAllCollisions(currentPieces);
+      currentPieces = resolveAllCollisions(currentPieces, maybeSnap);
     }
     setPieces(currentPieces);
   };
@@ -202,14 +226,18 @@ export default function Mosaic() {
         id: generateUUID(),
         type: "color",
         color: c,
-        width: snapToGrid(60 + Math.random() * 60),
-        height: snapToGrid(60 + Math.random() * 60),
-        top: snapToGrid(Math.random() * 200),
-        left: snapToGrid(Math.random() * 200),
+        width: maybeSnap(60 + Math.random() * 60),
+        height: maybeSnap(60 + Math.random() * 60),
+        top: maybeSnap(Math.random() * 200),
+        left: maybeSnap(Math.random() * 200),
       };
-      const placed = findNonOverlappingPlacement(candidate, currentPieces);
+      const placed = findNonOverlappingPlacement(
+        candidate,
+        currentPieces,
+        maybeSnap
+      );
       currentPieces.push(placed);
-      currentPieces = resolveAllCollisions(currentPieces);
+      currentPieces = resolveAllCollisions(currentPieces, maybeSnap);
     }
     setPieces(currentPieces);
   };
@@ -273,15 +301,15 @@ export default function Mosaic() {
               const candidateLeft = initialSize.left + dx;
               const candidateW = initialSize.w - dx;
               if (candidateW >= MIN_SIZE) {
-                newLeft = snapToGrid(candidateLeft);
-                newW = snapToGrid(candidateW);
+                newLeft = maybeSnap(candidateLeft);
+                newW = maybeSnap(candidateW);
               }
               break;
             }
             case "right": {
               const candidateW = initialSize.w + dx;
               if (candidateW >= MIN_SIZE) {
-                newW = snapToGrid(candidateW);
+                newW = maybeSnap(candidateW);
               }
               break;
             }
@@ -289,15 +317,15 @@ export default function Mosaic() {
               const candidateTop = initialSize.top + dy;
               const candidateH = initialSize.h - dy;
               if (candidateH >= MIN_SIZE) {
-                newTop = snapToGrid(candidateTop);
-                newH = snapToGrid(candidateH);
+                newTop = maybeSnap(candidateTop);
+                newH = maybeSnap(candidateH);
               }
               break;
             }
             case "bottom": {
               const candidateH = initialSize.h + dy;
               if (candidateH >= MIN_SIZE) {
-                newH = snapToGrid(candidateH);
+                newH = maybeSnap(candidateH);
               }
               break;
             }
@@ -312,7 +340,7 @@ export default function Mosaic() {
           };
           const newArr = [...prev];
           newArr[idx] = updated;
-          return resolveAllCollisions(newArr);
+          return resolveAllCollisions(newArr, maybeSnap);
         });
         evt.preventDefault();
         return;
@@ -329,18 +357,18 @@ export default function Mosaic() {
           const newTop = evt.clientY - containerRect.top - dragOffset.y;
           const updated = {
             ...piece,
-            left: snapToGrid(newLeft),
-            top: snapToGrid(newTop),
+            left: maybeSnap(newLeft),
+            top: maybeSnap(newTop),
           };
 
           const newArr = [...prev];
           newArr[idx] = updated;
-          return resolveAllCollisions(newArr);
+          return resolveAllCollisions(newArr, maybeSnap);
         });
         evt.preventDefault();
       }
     },
-    [resizing, draggingId, dragOffset, initialPointer, initialSize]
+    [resizing, draggingId, dragOffset, initialPointer, initialSize, maybeSnap]
   );
 
   /** Stop dragging/resizing. */
@@ -378,7 +406,9 @@ export default function Mosaic() {
     [bringToFront, draggingId, resizing, pieces]
   );
 
-  /** handleContextMenu: right-click on a piece => open custom context menu */
+  /**
+   * handleContextMenu: right-click on a piece => open custom context menu
+   */
   const handleContextMenu = useCallback(
     (evt: MouseEvent<HTMLDivElement>, pieceId: string) => {
       evt.preventDefault();
@@ -390,7 +420,9 @@ export default function Mosaic() {
     []
   );
 
-  /** handleGlobalContextMenu: if user right-clicks outside any piece, close context menu */
+  /**
+   * handleGlobalContextMenu: if user right-clicks outside any piece, close context menu
+   */
   const handleGlobalContextMenu = useCallback(
     (evt: MouseEvent<HTMLDivElement>) => {
       if (evt.target === containerRef.current) {
@@ -428,6 +460,7 @@ export default function Mosaic() {
       imageFileRef.current.click();
     }
   }, []);
+
   const handleChangeImageFile = useCallback(
     async (evt: ChangeEvent<HTMLInputElement>) => {
       if (!evt.target.files || !contextPieceId) return;
@@ -466,24 +499,34 @@ export default function Mosaic() {
       onContextMenu={handleGlobalContextMenu}
     >
       <div className={styles.controls}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={onFileChange}
-          style={{ display: "none" }}
-        />
-        <Button
-          variant="contained"
-          onClick={() => fileInputRef.current?.click()}
-          sx={{ mr: 1 }}
-        >
-          Upload Images
-        </Button>
-        <Button variant="outlined" onClick={addColorBlocks}>
-          Add Color Blocks
-        </Button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={onFileChange}
+            style={{ display: "none" }}
+          />
+          <Button
+            variant="contained"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Upload Images
+          </Button>
+
+          <Button variant="outlined" onClick={addColorBlocks}>
+            Add Color Blocks
+          </Button>
+
+          <Button
+            variant="outlined"
+            color={snapEnabled ? "success" : "warning"}
+            onClick={() => setSnapEnabled((prev) => !prev)}
+          >
+            {snapEnabled ? "Disable Snap" : "Enable Snap"}
+          </Button>
+        </div>
       </div>
 
       {/* Hidden file input for changing image src in context menu */}
@@ -507,55 +550,15 @@ export default function Mosaic() {
         ))}
       </div>
 
-      {/* Our custom context menu, shown if contextMenuOpen */}
-      {contextMenuOpen && selectedPiece && (
-        <div
-          style={{
-            position: "fixed",
-            top: contextMenuPosition.y,
-            left: contextMenuPosition.x,
-            background: "white",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-            padding: "8px",
-            zIndex: 9999,
-          }}
-        >
-          {selectedPiece.type === "color" && (
-            <label style={{ display: "block", marginBottom: "8px" }}>
-              Change color:
-              <input
-                type="color"
-                style={{ marginLeft: "8px" }}
-                onChange={handleChangeColor}
-              />
-            </label>
-          )}
-
-          {selectedPiece.type === "image" && (
-            <>
-              <Button
-                onClick={handleChangeImageClick}
-                variant="outlined"
-                size="small"
-                sx={{ mb: 1 }}
-              >
-                Change Image
-              </Button>
-              <br />
-            </>
-          )}
-
-          <Button
-            onClick={handleDeletePiece}
-            variant="contained"
-            color="error"
-            size="small"
-          >
-            Delete
-          </Button>
-        </div>
-      )}
+      <MosaicContextMenu
+        open={contextMenuOpen && !!selectedPiece}
+        position={contextMenuPosition}
+        piece={selectedPiece || null}
+        onChangeColor={handleChangeColor}
+        onChangeImageClick={handleChangeImageClick}
+        onDeletePiece={handleDeletePiece}
+        closeMenu={() => setContextMenuOpen(false)}
+      />
     </Box>
   );
 }
