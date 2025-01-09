@@ -9,7 +9,15 @@ import {
   type PointerEvent,
   type ChangeEvent,
 } from "react";
-import { Button, Box } from "@mui/material";
+import {
+  Container,
+  Paper,
+  Stack,
+  Switch,
+  FormControlLabel,
+  Button,
+  Box,
+} from "@mui/material";
 import MosaicPiece from "./MosaicPiece";
 import MosaicContextMenu from "./MosaicContextMenu";
 import ColorPalette from "./ColorPalette";
@@ -30,12 +38,19 @@ import {
   updateResize,
   endResize,
 } from "@/utils/dragResizeUtils";
+import CanvasSettings from "./CanvasSettings";
 
 /** Constants and Utility Functions **/
 const MIN_SIZE = 30;
 
 /** Mosaic Component **/
 export default function Mosaic() {
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+
+  const handleCanvasSizeChange = (width: number, height: number) => {
+    setCanvasSize({ width, height });
+  };
+
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<{
     x: number;
@@ -80,7 +95,7 @@ export default function Mosaic() {
         if (p.paletteIndex === index) {
           return {
             ...p,
-            color: newColor, // keep a color field consistent if needed
+            color: newColor,
           };
         }
         return p;
@@ -165,7 +180,6 @@ export default function Mosaic() {
     (evt: PointerEvent<HTMLDivElement>, pieceId: string) => {
       if (!containerRef.current) return;
       if (resizing) return; // skip if resizing
-
       beginDrag(evt, pieceId, bringToFront, setDraggingId, setDragOffset);
     },
     [bringToFront, resizing]
@@ -271,18 +285,21 @@ export default function Mosaic() {
   );
 
   /** handleChangeColorIndex => set piece color from palette. */
-  const handleChangeColorIndex = useCallback((index: number) => {
-    if (!contextPieceId) return;
-    setPieces((prev) =>
-      prev.map((p) => {
-        if (p.id === contextPieceId && p.type === "color") {
-          return { ...p, color: colorPalette[index], paletteIndex: index };
-        }
-        return p;
-      })
-    );
-    setContextMenuOpen(false);
-  }, [contextPieceId, colorPalette]);
+  const handleChangeColorIndex = useCallback(
+    (index: number) => {
+      if (!contextPieceId) return;
+      setPieces((prev) =>
+        prev.map((p) => {
+          if (p.id === contextPieceId && p.type === "color") {
+            return { ...p, color: colorPalette[index], paletteIndex: index };
+          }
+          return p;
+        })
+      );
+      setContextMenuOpen(false);
+    },
+    [contextPieceId, colorPalette]
+  );
 
   /** handleChangeImage => open file input to pick new image. */
   const imageFileRef = useRef<HTMLInputElement | null>(null);
@@ -323,23 +340,9 @@ export default function Mosaic() {
   const selectedPiece = pieces.find((p) => p.id === contextPieceId);
 
   return (
-    <Box
-      sx={{ padding: 4 }}
-      style={{ touchAction: "none" }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onContextMenu={handleGlobalContextMenu}
-    >
-      {/* ColorPalette */}
-      <Box sx={{ marginBottom: 2 }}>
-        <ColorPalette
-          colorPalette={colorPalette}
-          onChangeColor={handlePaletteChange}
-        />
-      </Box>
-
-      <div className={styles.controls}>
-        <div style={{ display: "flex", gap: "8px" }}>
+    <Container maxWidth="lg" sx={{ py: 4, touchAction: "none" }}>
+      <Stack spacing={3}>
+        <Stack direction="row" spacing={2}>
           <input
             ref={fileInputRef}
             type="file"
@@ -355,59 +358,95 @@ export default function Mosaic() {
             Upload Images
           </Button>
 
-          <Button variant="outlined" onClick={addColorBlocks}>
+          <Button variant="contained" onClick={addColorBlocks}>
             Add Color Blocks
           </Button>
+        </Stack>
 
-          <Button
-            variant="outlined"
-            color={snapEnabled ? "success" : "warning"}
-            onClick={() => setSnapEnabled((prev) => !prev)}
+        {/* ColorPalette and Canvas Settings */}
+        <Stack direction="row" spacing={2}>
+          <ColorPalette
+            colorPalette={colorPalette}
+            onChangeColor={handlePaletteChange}
+          />
+        </Stack>
+        <Stack direction="row" spacing={2}>
+          <CanvasSettings onChange={handleCanvasSizeChange} />
+        </Stack>
+        <Stack direction="row" spacing={2}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={snapEnabled}
+                onChange={() => setSnapEnabled((prev) => !prev)}
+                color="primary"
+              />
+            }
+            label={snapEnabled ? "Snap to Grid" : "Enable Snap"}
+          />
+        </Stack>
+        {/* Hidden file input for changing image src in context menu */}
+        <input
+          ref={imageFileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleChangeImageFile}
+        />
+
+        <Paper
+          elevation={3}
+          sx={{
+            width: canvasSize.width,
+            height: canvasSize.height,
+            position: "relative",
+            margin: "0 auto",
+            p: 1,
+          }}
+        >
+          <div
+            className={styles.mosaicContainer}
+            ref={containerRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              position: "relative",
+            }}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onContextMenu={handleGlobalContextMenu}
           >
-            {snapEnabled ? "Disable Snap" : "Enable Snap"}
-          </Button>
-        </div>
-      </div>
+            {pieces.map((piece) => {
+              // If paletteIndex is defined, override the piece.color
+              const displayColor =
+                piece.type === "color" && piece.paletteIndex !== undefined
+                  ? colorPalette[piece.paletteIndex]
+                  : piece.color;
 
-      {/* Hidden file input for changing image src in context menu */}
-      <input
-        ref={imageFileRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={handleChangeImageFile}
-      />
+              return (
+                <MosaicPiece
+                  key={piece.id}
+                  piece={{ ...piece, color: displayColor }}
+                  onPointerDown={handlePiecePointerDown}
+                  onContextMenu={handleContextMenu}
+                  onResizeEdgePointerDown={handleResizeEdgePointerDown}
+                />
+              );
+            })}
+          </div>
+        </Paper>
 
-      <div className={styles.mosaicContainer} ref={containerRef}>
-        {pieces.map((piece) => {
-          // If paletteIndex is defined, override the piece.color
-          const displayColor =
-            piece.type === "color" && piece.paletteIndex !== undefined
-              ? colorPalette[piece.paletteIndex]
-              : piece.color;
-
-          return (
-            <MosaicPiece
-              key={piece.id}
-              piece={{ ...piece, color: displayColor }}
-              onPointerDown={handlePiecePointerDown}
-              onContextMenu={handleContextMenu}
-              onResizeEdgePointerDown={handleResizeEdgePointerDown}
-            />
-          );
-        })}
-      </div>
-
-      <MosaicContextMenu
-        open={contextMenuOpen && !!selectedPiece}
-        position={contextMenuPosition}
-        piece={selectedPiece || null}
-        colorPalette={colorPalette}
-        onChangeColorIndex={handleChangeColorIndex}
-        onChangeImageClick={handleChangeImageClick}
-        onDeletePiece={handleDeletePiece}
-        closeMenu={() => setContextMenuOpen(false)}
-      />
-    </Box>
+        <MosaicContextMenu
+          open={contextMenuOpen && !!selectedPiece}
+          position={contextMenuPosition}
+          piece={selectedPiece || null}
+          colorPalette={colorPalette}
+          onChangeColorIndex={handleChangeColorIndex}
+          onChangeImageClick={handleChangeImageClick}
+          onDeletePiece={handleDeletePiece}
+          closeMenu={() => setContextMenuOpen(false)}
+        />
+      </Stack>
+    </Container>
   );
 }

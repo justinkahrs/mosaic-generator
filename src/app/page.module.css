@@ -4,7 +4,6 @@
   min-height: 80vh;
   margin: 0 auto;
   /* Adjust as needed for your design */
-  border: 1px solid rgba(0, 0, 0, 0.1);
   overflow: hidden;
   /* Clip any overflow from partial overlaps */
 }

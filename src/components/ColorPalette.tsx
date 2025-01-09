@@ -1,3 +1,5 @@
+// Full Component with Fixed Tetrad Generation
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -5,15 +7,13 @@ import type React from "react";
 import { useState } from "react";
 import { Box, Button, Menu, MenuItem } from "@mui/material";
 import { HexColorPicker } from "react-colorful";
+import chroma from "chroma-js";
 
 interface ColorPaletteProps {
   colorPalette: string[];
   onChangeColor: (index: number, newColor: string) => void;
 }
 
-/**
- * Renders a list of circular color swatches. When clicked, opens a color picker menu with confirm/cancel buttons.
- */
 export default function ColorPalette({
   colorPalette,
   onChangeColor,
@@ -44,6 +44,28 @@ export default function ColorPalette({
     handleClose();
   };
 
+  // Fixed random tetrad color scheme generator
+  const generateRandomTetrad = () => {
+    const baseColor = chroma.random(); // Generate a random base color
+    const tetrad = [
+      baseColor.hex(),
+      baseColor.set("hsl.h", "+90").hex(),
+      baseColor.set("hsl.h", "+180").hex(),
+      baseColor.set("hsl.h", "+270").hex(),
+    ];
+
+    return tetrad;
+  };
+
+  const handleRandomize = () => {
+    const newPalette = generateRandomTetrad();
+    newPalette.forEach((color, index) => {
+      if (index < colorPalette.length) {
+        onChangeColor(index, color);
+      }
+    });
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Render color swatches */}
@@ -61,13 +83,17 @@ export default function ColorPalette({
             onClick={(event) => handleSwatchClick(event, index)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
-                // biome-ignore lint/suspicious/noExplicitAny: <explanation>
                 handleSwatchClick(e as any, index);
               }
             }}
           />
         ))}
       </Box>
+
+      {/* Randomize Button */}
+      <Button variant="contained" color="primary" onClick={handleRandomize}>
+        Randomize Palette
+      </Button>
 
       {/* Color picker menu */}
       <Menu
